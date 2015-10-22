@@ -9,6 +9,9 @@ import threading
 import sys
 import os
 from time import strftime
+import base64
+from database import Database
+db = Database()
 
 def pfserver():
     sys.path.append("../")
@@ -22,14 +25,7 @@ def pfserver():
     server.listen(10)
 
     # setup the Postfix EHLO Response
-    ehlo = '''250 {}
-    250-PIPELINING
-    250-SIZE 10240000
-    250-VRFY
-    250-ETRN
-    250-STARTTLS
-    250-AUTH LOGIN PLAIN
-    250 8BITMIME\n'''.format(mailoney.srvname)
+    ehlo = '250-{} Hello 127.0.0.1\n250-SIZE 10240000\n250 AUTH LOGIN PLAIN\n'.format(mailoney.srvname)
 
     #setup the Log File
     if os.path.exists('logs/credentials.log'):
@@ -49,6 +45,7 @@ def pfserver():
             count = 0
             while count < 10:
                 request=client_socket.recv(4096).lower()
+                print request
 
                 if 'ehlo' in request:
                     client_socket.send(ehlo)
@@ -66,14 +63,19 @@ def pfserver():
             #reset the counter and hope for creds
             count = 0
             while count < 10:
-                request = client_socket.recv(4096).lower()
-
-                if 'auth plain' in request:
+                request = client_socket.recv(4096)
+                print request
+                if 'auth plain' in request.lower():
                     #pull the base64 string and validate
-                    auth = request.split(' ')[2]
-                    timestamp = strftime("%Y-%m-%d %H:%M:%S")
-                    logfile.write('{}\tIP_Address: {}\tAuth: {}'.format(timestamp, addr[0], auth))
-                    client_socket.send('235 2.0.0 Authentication Failed\n')
+                    auth = request.split()[2]
+                    remote_ip = addr[0]
+                    print base64.b64decode(auth).encode('hex')
+                    decoded_auth = base64.b64decode(auth).split('\x00')
+                    db.add_creds(remote_ip, decoded_auth[1], decoded_auth[2])
+                    try:
+                        client_socket.send('235 2.0.0 Authentication Failed\n')
+                    except socket.error:
+                        break
 
                 elif 'exit' in request:
                     count = 10
