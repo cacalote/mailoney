@@ -8,7 +8,22 @@ from sqlalchemy.exc import IntegrityError
 
 Base = declarative_base()
 
-# Credentials Table
+class SMTPLogs(Base):
+    __tablename__ = 'smtp_logs'
+
+    id = Column(Integer(), primary_key=True)
+    connection_time = Column(DateTime(timezone=False), default=datetime.now(), nullable=False)
+    remote_ip = Column(String(255), nullable=True)
+    smtp_string = Column(String(255), nullable=True)
+
+    def __init__(self, remote_ip, smtp_string):
+        self.remote_ip = remote_ip
+        self.smtp_string = smtp_string
+
+    def __repr__(self):
+        return {'id':self.id,
+                'smtp_user':self.smtp_string
+                }
 
 class SMTPCredentials(Base):
     __tablename__ = 'smtp_credentials'
@@ -88,5 +103,17 @@ class Database:
             session.commit()
             return True
         except IntegrityError:
+            session.rollback()
+            return False
+
+    def add_log(self, remote_ip, data_line):
+        session = self.Session()
+        try:
+            logline = SMTPLogs(remote_ip, data_line)
+            session.add(logline)
+            session.commit()
+            return True
+        except IntegrityError as e:
+            print e
             session.rollback()
             return False

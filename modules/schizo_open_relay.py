@@ -9,9 +9,12 @@ import sys
 import errno
 import time
 import threading
-
+import base64
 import asyncore
 import asynchat
+
+from database import Database
+db = Database()
 
 
 output_lock = threading.RLock()
@@ -19,6 +22,7 @@ output_lock = threading.RLock()
 
 def log_to_file(file_path, ip, port, data):
     with output_lock:
+        db.add_log(ip, data)
         with open(file_path, "a") as f:
             message = "[{0}][{1}:{2}] {3}".format(time.time(), ip, port, data.encode("string-escape"))
             print file_path + " " + message
@@ -75,6 +79,7 @@ class SMTPChannel(asynchat.async_chat):
 
     # Overrides base class for convenience
     def push(self, msg):
+        print msg
         asynchat.async_chat.push(self, msg + '\r\n')
 
     # Implementation of base class abstract method
@@ -170,6 +175,12 @@ class SMTPChannel(asynchat.async_chat):
 
     def smtp_AUTH(self, arg):
         # Accept any auth attempt
+        if 'plain' in arg.lower():
+            #pull the base64 string and validate
+            auth = arg.split()[1]
+            remote_ip = self.addr[0]
+            decoded_auth = base64.b64decode(auth).split('\x00')
+            db.add_creds(remote_ip, decoded_auth[1], decoded_auth[2])
         self.push('235 Authentication succeeded')
 
     # factored
@@ -295,13 +306,15 @@ def module():
     class SchizoOpenRelay(SMTPServer):
 
         def process_message(self, peer, mailfrom, rcpttos, data):
-            #setup the Log File
-            log_to_file("logs/mail.log", peer[0], peer[1], '')
-            log_to_file("logs/mail.log", peer[0], peer[1], '*' * 50)
-            log_to_file("logs/mail.log", peer[0], peer[1], 'Mail to: {0}'.format(mailfrom))
-            log_to_file("logs/mail.log", peer[0], peer[1], 'Mail from: {0}'.format(", ".join(rcpttos)))
-            log_to_file("logs/mail.log", peer[0], peer[1], 'Data:')
-            log_to_file("logs/mail.log", peer[0], peer[1], data)
+            db_add = db.add_email(peer[0], rcpttos[0], mailfrom, data)
+            if not db_add:
+                #setup the Log File
+                log_to_file("logs/mail.log", peer[0], peer[1], '')
+                log_to_file("logs/mail.log", peer[0], peer[1], '*' * 50)
+                log_to_file("logs/mail.log", peer[0], peer[1], 'Mail to: {0}'.format(mailfrom))
+                log_to_file("logs/mail.log", peer[0], peer[1], 'Mail from: {0}'.format(", ".join(rcpttos)))
+                log_to_file("logs/mail.log", peer[0], peer[1], 'Data:')
+                log_to_file("logs/mail.log", peer[0], peer[1], data)
 
     def run():
         sys.path.append("../")

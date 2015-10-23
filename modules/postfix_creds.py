@@ -44,15 +44,21 @@ def pfserver():
             # Setup a loop to communicate with the client
             count = 0
             while count < 10:
-                request=client_socket.recv(4096).lower()
-                print request
+                try:
+                    request = client_socket.recv(4096).lower()
+                except socket.error:
+                    break
 
                 if 'ehlo' in request:
                     client_socket.send(ehlo)
                     break
                 else:
-                    client_socket.send('502 5.5.2 Error: command not recognized\n')
-                    count += 1
+                    try:
+                        client_socket.send('502 5.5.2 Error: command not recognized\n')
+                        count += 1
+                    except socket.error:
+                        count += 1
+                        break
 
             #kill the client for too many errors
             if count == 10:
@@ -64,30 +70,35 @@ def pfserver():
             count = 0
             while count < 10:
                 request = client_socket.recv(4096)
-                print request
                 if 'auth plain' in request.lower():
                     #pull the base64 string and validate
                     auth = request.split()[2]
                     remote_ip = addr[0]
-                    print base64.b64decode(auth).encode('hex')
                     decoded_auth = base64.b64decode(auth).split('\x00')
                     db.add_creds(remote_ip, decoded_auth[1], decoded_auth[2])
                     try:
                         client_socket.send('235 2.0.0 Authentication Failed\n')
                     except socket.error:
+                        client_socket.close()
                         break
 
                 elif 'exit' in request:
                     count = 10
                     break
                 else:
-                    client_socket.send('502 5.5.2 Error: command not recognized\n')
-                    count += 1
+                    try:
+                        client_socket.send('502 5.5.2 Error: command not recognized\n')
+                        count += 1
+                    except socket.error:
+                        count += 1
 
             #kill the connection for too many failures
             if count == 10:
-                client_socket.send('421 4.7.0 {} Error: too many errors\n'.format(mailoney.srvname))
-                client_socket.close()
+                try:
+                    client_socket.send('421 4.7.0 {} Error: too many errors\n'.format(mailoney.srvname))
+                    client_socket.close()
+                except socket.error:
+                    break
                 break
 
             # reset the count

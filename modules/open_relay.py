@@ -23,22 +23,6 @@ def or_module():
         def process_message(self, peer, mailfrom, rcpttos, data):
             # Write to db
             db_add = db.add_email(peer[0], rcpttos[0], mailfrom, data)
-            # Fail back to txt logging
-            if not db_add:
-                #setup the Log File
-                if os.path.exists('logs/mail.log'):
-                    logfile = open('logs/mail.log', 'a')
-                else:
-                    logfile = open('logs/mail.log', 'w')
-                logfile.write('\n\n' + '*' * 50 + '\n')
-                logfile.write('IP Address: {}\n'.format(peer[0]))
-                logfile.write('Mail to: {}\n'.format(mailfrom))
-                #Need to loop through rcpts if more than one is given
-                logfile.write('Mail from: {}\n'.format(rcpttos[0]))
-                logfile.write('Data:\n')
-                logfile.write('\n')
-                logfile.write(data)
-                logfile.close
 
     def run():
         sys.path.append("../")
